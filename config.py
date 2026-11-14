@@ -22,7 +22,9 @@ class Parameters:
     water_level: float = -0.58
     mountain_level: float = 0.80
     moisture_scale: float = 73.0
-    forest_threshold: float = 0.14
+    # Lower values classify more suitably elevated land as forest.
+    # -0.18 produces a forest-dominant wilderness on typical seeds.
+    forest_threshold: float = -0.18
     min_beach_lake: int = 100
     shallow_lake_max: int = 35
     settlement_count: int = 9

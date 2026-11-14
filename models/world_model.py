@@ -27,6 +27,7 @@ class WorldModel:
         self.settlements = []
         self.routes = []
         self.lakes = []
+        self.objects = []
 
     def generate(self):
         n = self.params.size
@@ -75,9 +76,14 @@ class WorldModel:
                                 self.terrain[neighbor] = SAND
         self._place_settlements()
         self._connect_settlements()
+        self._place_objects()
 
     def _place_settlements(self):
-        """Score plausible areas, reserve rectangular lots and avoid overlap."""
+        """Reserve a settlement REGION without changing existing terrain.
+
+        Each blueprint records a maximum development area. Future building
+        placement will use small individual footprints inside that region.
+        """
         n, p = self.params.size, self.params
         rng = random.Random(self.seed + 87)
         self.settlements = []
@@ -98,10 +104,17 @@ class WorldModel:
                        abs(cy-s["center"][1]) < (h+s["size"][1])//2+10
                        for s in self.settlements):
                     continue
-                # Sample entire lot; prefer land already flat and buildable.
+                # Sample the region. A settlement can include trees and paths,
+                # but its center needs to be accessible and relatively flat.
                 region = [self.terrain[yy*n+xx] for yy in range(y,y+h,2) for xx in range(x,x+w,2)]
                 suitable = sum(t in (GRASS, FOREST, SAND) for t in region) / len(region)
-                if suitable < 0.93:
+                if suitable < 0.85 or self.terrain[cy*n+cx] not in (GRASS, FOREST, SAND):
+                    continue
+                # Favor low relief rather than flattening the entire lot.
+                samples = [self.elevation[yy*n+xx] for yy in range(y,y+h,3)
+                           for xx in range(x,x+w,3)]
+                relief = max(samples) - min(samples)
+                if relief > 0.35:
                     continue
                 nearby = 0
                 r = 16
@@ -109,26 +122,27 @@ class WorldModel:
                     for xx in range(max(0,cx-r),min(n,cx+r),3):
                         if self.terrain[yy*n+xx] in (SHALLOW,DEEP):
                             nearby += 1
-                score = suitable + min(nearby, 8)*0.015
+                score = suitable + min(nearby, 8)*0.015 - relief
                 if name == "story_hub":
                     score -= (abs(cx-n//2)+abs(cy-n//2))/n
                 candidates.append((score,x,y))
             if not candidates:
-                # Try a smaller fallback for the mandatory hub only.
+                # Required hub fallback: find an existing walkable site,
+                # do NOT rewrite a large rectangle of forest or water.
                 if name == "story_hub":
-                    x = n//2-w//2
-                    y = n//2-h//2
-                    for yy in range(y,y+h):
-                        for xx in range(x,x+w):
-                            self.terrain[yy*n+xx] = GRASS
+                    valid = [(abs(xx-n//2)+abs(yy-n//2),xx,yy)
+                             for yy in range(h//2,n-h//2)
+                             for xx in range(w//2,n-w//2)
+                             if self.terrain[yy*n+xx] in (GRASS,FOREST,SAND)]
+                    if not valid:
+                        raise RuntimeError("World contains no suitable story hub tile")
+                    _,cx,cy = min(valid)
+                    x,y = cx-w//2, cy-h//2
                 else:
                     continue
             else:
                 _,x,y = max(candidates)
-            # Reserve a clean, buildable town lot; detailed buildings come later.
-            for yy in range(y,y+h):
-                for xx in range(x,x+w):
-                    self.terrain[yy*n+xx] = GRASS
+            # Critically, DO NOT alter terrain here. The region is only metadata.
             self.settlements.append({"id": f"{name}_{len(self.settlements)+1}",
                                      "blueprint": name, "x": x, "y": y,
                                      "size": [w,h], "center": [x+w//2,y+h//2]})
@@ -143,7 +157,8 @@ class WorldModel:
             nearest = min(connected, key=lambda s:
                           math.dist(s["center"], settlement["center"]))
             path = find_route(self.terrain, self.params.size,
-                              tuple(nearest["center"]), tuple(settlement["center"]))
+                              tuple(nearest["center"]), tuple(settlement["center"]),
+                              elevation=self.elevation, seed=self.seed)
             if path:
                 for k in path:
                     if self.terrain[k] not in (DEEP,MOUNTAIN):
@@ -151,6 +166,34 @@ class WorldModel:
                 self.routes.append({"from": nearest["id"], "to": settlement["id"],
                                     "tiles": path})
                 connected.append(settlement)
+
+    def _place_objects(self):
+        """Place simple trees and boulders on valid terrain, away from town cores.
+
+        The object records can later be mapped to sprite IDs or Unity prefabs.
+        A coarse sampling grid and a seeded RNG prevent flicker/overcrowding.
+        """
+        n = self.params.size
+        rng = random.Random(self.seed + 901)
+        self.objects = []
+        # Every three tiles, consider one slightly jittered location.
+        for y in range(1,n-2,3):
+            for x in range(1,n-2,3):
+                xx = x + rng.randrange(3)
+                yy = y + rng.randrange(3)
+                tile = self.terrain[yy*n+xx]
+                if any(abs(xx-s["center"][0]) < 5 and
+                       abs(yy-s["center"][1]) < 5 for s in self.settlements):
+                    continue
+                if tile == FOREST and rng.random() < .72:
+                    kind = "tree"
+                elif tile == GRASS and rng.random() < .075:
+                    kind = "tree"
+                elif tile == ROCK and rng.random() < .25:
+                    kind = "rock"
+                else:
+                    continue
+                self.objects.append({"type":kind,"x":xx,"y":yy})
 
     def statistics(self):
         counts = Counter(self.terrain)
@@ -162,7 +205,8 @@ class WorldModel:
         SAVE_DIR.mkdir(exist_ok=True)
         payload = {"format_version":1,"seed":self.seed,"parameters":asdict(self.params),
                    "terrain":self.terrain,"elevation":self.elevation,"moisture":self.moisture,
-                   "settlements":self.settlements,"routes":self.routes,"lakes":self.lakes}
+                   "settlements":self.settlements,"routes":self.routes,"lakes":self.lakes,
+                   "objects":self.objects}
         with gzip.open(path,"wt",encoding="utf-8") as f:
             json.dump(payload,f,separators=(",",":"))
 
@@ -176,6 +220,8 @@ class WorldModel:
         model = cls(p,int(data["seed"]))
         for key in ("terrain","elevation","moisture","settlements","routes","lakes"):
             setattr(model,key,data[key])
+        # Older v0.1 saves don't have environmental objects.
+        model.objects = data.get("objects",[])
         if len(model.terrain) != p.size*p.size:
             raise ValueError("Invalid saved terrain dimensions")
         return model

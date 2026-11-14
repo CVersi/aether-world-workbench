@@ -1,6 +1,6 @@
-# The Fractured Aether — World Workbench v0.1 (modular)
+# The Fractured Aether — World Workbench v0.2
 
-This is an independent Python/Pygame application for generating, inspecting and saving worlds. It does not change the original game. **The existing generation algorithms are preserved** in this refactor, including the known rectangular town footprints and straight roads.
+This is an independent Python/Pygame application for generating, inspecting and saving worlds. It does not change the original game. **v0.2 makes forests more prevalent, preserves terrain when placing settlements, improves roads and adds lightweight resource objects.**
 
 ## Start
 
@@ -42,7 +42,7 @@ world_workbench/
 
 1. **`config.py`:** `Parameters` is a dataclass, a collection of named values; `asdict()` turns it into JSON-compatible save data. Terrain IDs are integers, so keep them consistent if building runtime support.
 2. **`generation/algorithms.py`:** `water_components()` uses breadth-first search (flood fill) to find connected bodies of water. `find_route()` uses A* search and a priority queue to find cheaper paths that avoid certain terrain.
-3. **`models/world_model.py`:** `WorldModel` owns the world snapshot and currently coordinates noise, water classification, site placement, road routing and save/load. Once we improve the algorithms, we can split those stages further without touching the UI.
+3. **`models/world_model.py`:** `WorldModel` owns the world snapshot and currently coordinates noise, water classification, site placement, road routing, decorative objects and save/load. Once we improve the algorithms, we can split those stages further without touching the UI.
 4. **`ui/slider.py`:** converts mouse positions into numeric parameters; does not generate terrain itself.
 5. **`ui/workbench.py`:** receives input, calls the model and renders a preview. It doesn't implement noise or pathfinding.
 6. **`main.py`:** the simple launcher. The dependency direction is UI → model → algorithms, making algorithm testing and an eventual C# port easier.
@@ -80,12 +80,24 @@ python -m unittest discover -s tests -v
 
 ## Known v0.1 shortcomings
 
-- Settlements still replace rectangular patches with grass.
-- Roads can be straight/right-angled and do not build bridges.
+- Settlement regions are still rectangular *metadata*, but no longer clear the surrounding terrain. Individual building footprints are the next step.
+- Roads use slope and deterministic coherent variation; they can still look angular and do not build bridges.
 - Real rivers, drainage basins, cliffs, docks and boat routes are not modeled yet.
 - Settlements are markers/reserved areas, not individual building layouts.
 - Story-hub placement exists, but story progression accessibility is not validated.
 - Generation is synchronous, so large maps may freeze the UI briefly.
+
+## What's new in v0.2?
+
+- **Forest threshold:** Lowering the threshold produces more forest. Default is now `-0.18`, which gives roughly 49% forest on seed 12345 (256×256).
+- **Settlement placement:** The generator scores plausible land and stores settlement footprints without painting broad grass rectangles. A required story hub falls back to a real walkable tile.
+- **Roads:** A* now prefers gentler slopes and follows broad deterministic road-preference bands. Road geometry is still tile-based and will need more work.
+- **Decorative objects:** Deterministically positioned trees and boulders make the preview easier to read. They are recorded in `WorldModel.objects` and serialized in saved worlds.
+- **Backward compatibility:** Old v0.1 world saves without an `objects` field still load (with an empty object list). Existing saved landscapes stay unchanged.
+
+### Important design distinction
+
+The dark-green **forest terrain** indicates biome and general vegetation suitability; a **tree object** is a particular harvestable or collidable thing we can eventually put in the game. This separation lets us clear a tree for a road without changing the underlying forest biome.
 
 Commit this as a **refactor-only milestone** before changing generation algorithms. The included `.gitignore` omits experimental saves; deliberately track any curated map you choose for the game.
 

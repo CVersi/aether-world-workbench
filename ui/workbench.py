@@ -1,5 +1,6 @@
 """Pygame workbench UI: sliders, map preview, input and controls."""
 import random
+import json
 from collections import Counter
 from pathlib import Path
 from datetime import datetime
@@ -28,7 +29,7 @@ class Workbench:
             Slider("Water level","water_level",220,-.8,-.05,.01),
             Slider("Mountain level","mountain_level",274,.15,.95,.01),
             Slider("Moisture scale","moisture_scale",328,20,190,5),
-            Slider("Forest moisture threshold","forest_threshold",382,-.5,.6,.02),
+            Slider("Forest threshold", "forest_threshold",382,-.5,.6,.02),
             Slider("Min lake size for beach","min_beach_lake",436,0,800,10),
             Slider("Max shallow lake size","shallow_lake_max",490,0,200,5),
             Slider("Settlement count","settlement_count",544,1,18,1),
@@ -121,6 +122,18 @@ class Workbench:
         s.set_clip(MAP_RECT)
         s.blit(image,(round(pos.x),round(pos.y)))
         if self.layer in (0,3):
+            # Decorative resources are world data, not random UI pixels.
+            # They therefore remain stable across zooming and save/load.
+            for obj in self.model.objects:
+                px = round(pos.x + (obj["x"] + .5)*scale)
+                py = round(pos.y + (obj["y"] + .5)*scale)
+                if obj["type"] == "tree":
+                    color = (18, 63, 40)
+                    radius = max(2, round(scale * 0.75))
+                else:
+                    color = (80, 84, 83)
+                    radius = max(2, round(scale * 0.7))
+                pygame.draw.circle(s, color, (px,py), radius)
             for site in self.model.settlements:
                 x,y = site["center"]
                 px,py = round(pos.x+x*scale),round(pos.y+y*scale)
@@ -140,8 +153,8 @@ class Workbench:
             s.blit(txt,txt.get_rect(center=rect.center))
         counts,walkable = self.model.statistics()
         n = len(self.model.terrain)
-        summary = (f"On-foot {walkable:.1f}% | Deep water {counts[DEEP]*100/n:.1f}% | "
-                   f"Mountain {counts[MOUNTAIN]*100/n:.1f}%")
+        summary = (f"On-foot {walkable:.1f}% | Forest {counts[FOREST]*100/n:.1f}% | "
+                   f"Deep water {counts[DEEP]*100/n:.1f}% | Objects {len(self.model.objects)}")
         s.blit(self.small.render(summary,True,(214,227,220)),(20,736))
         status = self.notice + ("  [Unsaved settings]" if self.dirty else "")
         s.blit(self.small.render(status[:62],True,(214,185,124)),(790,705))

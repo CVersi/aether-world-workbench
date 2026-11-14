@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from config import GRASS, DEEP, Parameters
+from config import GRASS, FOREST, ROCK, ROAD, DEEP, Parameters
 from generation.algorithms import water_components, find_route
 from models.world_model import WorldModel
 
@@ -49,6 +49,30 @@ class WorldTests(unittest.TestCase):
             self.assertEqual(restored.terrain, self.world.terrain)
             self.assertEqual(restored.routes, self.world.routes)
             self.assertEqual(restored.settlements, self.world.settlements)
+            self.assertEqual(restored.objects, self.world.objects)
+
+    def test_settlements_do_not_erase_natural_terrain(self):
+        # Generate a reference map without settlements/roads/objects.
+        natural = WorldModel(Parameters(size=64, settlement_count=3), 123)
+        natural._place_settlements = lambda: None
+        natural._connect_settlements = lambda: None
+        natural._place_objects = lambda: None
+        natural.generate()
+        # Roads may replace tiles, but settlements may not overwrite terrain.
+        for before, after in zip(natural.terrain, self.world.terrain):
+            if before != after:
+                self.assertEqual(after, ROAD)
+
+    def test_objects_follow_terrain_rules(self):
+        n = self.world.params.size
+        for obj in self.world.objects:
+            terrain = self.world.terrain[obj['y'] * n + obj['x']]
+            if obj['type'] == 'tree':
+                self.assertIn(terrain, (GRASS, FOREST))
+            elif obj['type'] == 'rock':
+                self.assertEqual(terrain, ROCK)
+            else:
+                self.fail('Unknown decorative object')
 
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@
 import heapq
 from collections import deque
 from config import DEEP, MOUNTAIN, FOREST, ROCK, SHALLOW
+from opensimplex import OpenSimplex
 
 def water_components(terrain, n):
     """4-connected water regions, avoiding diagonal-only connections."""
@@ -27,13 +28,22 @@ def water_components(terrain, n):
     return regions
 
 
-def find_route(terrain, n, start, goal):
-    """A* avoids deep water and mountains; limits work for responsiveness."""
+def find_route(terrain, n, start, goal, elevation=None, seed=0):
+    """A* road routing with slope costs and smoothly varying terrain preferences.
+
+    The optional elevation field penalizes steep roads. Low-frequency noise
+    varies construction costs across a plain, favoring broad winding corridors.
+    A road remains a four-connected sequence of traversable tiles.
+    """
     a = start[1]*n + start[0]
     b = goal[1]*n + goal[0]
     frontier = [(0, a)]
     cost = {a: 0}
     parent = {}
+    # Use its own deterministic noise field, independent of terrain generation.
+    road_noise = OpenSimplex(seed + 731)
+    # Cache preferences so the same coordinate is not resampled repeatedly.
+    preferences = {}
     steps = 0
     while frontier and steps < n * n:
         _, u = heapq.heappop(frontier)
@@ -53,7 +63,12 @@ def find_route(terrain, n, start, goal):
             tile = terrain[v]
             if tile in (DEEP, MOUNTAIN):
                 continue
-            step = {FOREST: 3, ROCK: 5, SHALLOW: 9}.get(tile, 1)
+            if v not in preferences:
+                noise = road_noise.noise2(xx / 18.0, yy / 18.0)
+                preferences[v] = (noise + 1) * 1.4
+            slope = abs(elevation[v] - elevation[u]) if elevation is not None else 0
+            step = ({FOREST: 1.4, ROCK: 5, SHALLOW: 9}.get(tile, 1)
+                    + 50 * slope + preferences[v])
             new_cost = cost[u] + step
             if new_cost < cost.get(v, float("inf")):
                 parent[v] = u
