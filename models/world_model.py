@@ -13,8 +13,9 @@ from pathlib import Path
 from opensimplex import OpenSimplex
 
 from config import (Parameters, BLUEPRINTS, GRASS, FOREST, SAND, SHALLOW,
-                    DEEP, ROCK, MOUNTAIN, ROAD, PASSABLE_ON_FOOT, SAVE_DIR)
+                    DEEP, ROCK, MOUNTAIN, ROAD, ANCIENT, PASSABLE_ON_FOOT, SAVE_DIR)
 from generation.algorithms import water_components, find_route
+from generation.hydrology import carve_rivers
 
 class WorldModel:
     """Global geography, settlements and roads; no Pygame rendering dependencies."""
@@ -27,6 +28,7 @@ class WorldModel:
         self.settlements = []
         self.routes = []
         self.lakes = []
+        self.rivers = []
         self.objects = []
 
     def generate(self):
@@ -74,6 +76,10 @@ class WorldModel:
                             neighbor = yy*n+xx
                             if self.terrain[neighbor] == GRASS:
                                 self.terrain[neighbor] = SAND
+        # Rivers are formed before civilizations are placed, so settlements
+        # can eventually use them as transport and freshwater opportunities.
+        self.rivers = carve_rivers(self.terrain, self.elevation, n,
+                                  self.seed, p.river_count)
         self._place_settlements()
         self._connect_settlements()
         self._place_objects()
@@ -164,8 +170,24 @@ class WorldModel:
                     if self.terrain[k] not in (DEEP,MOUNTAIN):
                         self.terrain[k] = ROAD
                 self.routes.append({"from": nearest["id"], "to": settlement["id"],
-                                    "tiles": path})
+                                    "tiles": path, "type": "modern"})
                 connected.append(settlement)
+
+        # A single ancient route is an illustrative surviving infrastructure
+        # link. It can use expensive mountain/water crossings that modern A*
+        # refuses, without implying the present population can build them.
+        hub = next((s for s in self.settlements if s["blueprint"] == "story_hub"), None)
+        castle = next((s for s in self.settlements if s["blueprint"] == "castle"), None)
+        if hub and castle:
+            relic_path = find_route(self.terrain, self.params.size,
+                                    tuple(hub["center"]), tuple(castle["center"]),
+                                    elevation=self.elevation, seed=self.seed + 19,
+                                    ancient=True)
+            if relic_path:
+                for k in relic_path:
+                    self.terrain[k] = ANCIENT
+                self.routes.append({"from": hub["id"], "to": castle["id"],
+                                    "tiles": relic_path, "type": "ancient"})
 
     def _place_objects(self):
         """Place simple trees and boulders on valid terrain, away from town cores.
@@ -206,7 +228,7 @@ class WorldModel:
         payload = {"format_version":1,"seed":self.seed,"parameters":asdict(self.params),
                    "terrain":self.terrain,"elevation":self.elevation,"moisture":self.moisture,
                    "settlements":self.settlements,"routes":self.routes,"lakes":self.lakes,
-                   "objects":self.objects}
+                   "objects":self.objects,"rivers":self.rivers}
         with gzip.open(path,"wt",encoding="utf-8") as f:
             json.dump(payload,f,separators=(",",":"))
 
@@ -222,6 +244,7 @@ class WorldModel:
             setattr(model,key,data[key])
         # Older v0.1 saves don't have environmental objects.
         model.objects = data.get("objects",[])
+        model.rivers = data.get("rivers",[])
         if len(model.terrain) != p.size*p.size:
             raise ValueError("Invalid saved terrain dimensions")
         return model

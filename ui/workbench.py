@@ -33,11 +33,12 @@ class Workbench:
             Slider("Min lake size for beach","min_beach_lake",436,0,800,10),
             Slider("Max shallow lake size","shallow_lake_max",490,0,200,5),
             Slider("Settlement count","settlement_count",544,1,18,1),
+            Slider("River sources","river_count",590,0,12,1),
         ]
-        self.buttons = [("Generate",pygame.Rect(790,615,100,34)),
-                        ("New seed",pygame.Rect(899,615,105,34)),
-                        ("Save map",pygame.Rect(1013,615,110,34)),
-                        ("Load latest",pygame.Rect(790,658,150,34))]
+        self.buttons = [("Generate",pygame.Rect(790,650,100,31)),
+                        ("New seed",pygame.Rect(899,650,105,31)),
+                        ("Save map",pygame.Rect(1013,650,110,31)),
+                        ("Load latest",pygame.Rect(790,689,150,30))]
         self.layer = 0
         self.preview = None
         self.zoom = 1.0
@@ -157,7 +158,7 @@ class Workbench:
                    f"Deep water {counts[DEEP]*100/n:.1f}% | Objects {len(self.model.objects)}")
         s.blit(self.small.render(summary,True,(214,227,220)),(20,736))
         status = self.notice + ("  [Unsaved settings]" if self.dirty else "")
-        s.blit(self.small.render(status[:62],True,(214,185,124)),(790,705))
+        s.blit(self.small.render(status[:62],True,(214,185,124)),(790,729))
         pygame.display.flip()
 
     def run(self):

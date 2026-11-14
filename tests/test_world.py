@@ -3,8 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from config import GRASS, FOREST, ROCK, ROAD, DEEP, Parameters
+from config import GRASS, FOREST, ROCK, ROAD, ANCIENT, DEEP, SHALLOW, Parameters
 from generation.algorithms import water_components, find_route
+from generation.hydrology import carve_rivers
 from models.world_model import WorldModel
 
 
@@ -22,6 +23,27 @@ class AlgorithmTests(unittest.TestCase):
         route = find_route(tiles, 5, (0, 2), (4, 2))
         self.assertTrue(route)
         self.assertNotIn(12, route)
+
+    def test_ancient_route_can_cross_water_barrier(self):
+        # A complete vertical barrier makes an overland route impossible.
+        tiles = [GRASS] * 25
+        for y in range(5):
+            tiles[y * 5 + 2] = DEEP
+        self.assertFalse(find_route(tiles, 5, (0, 2), (4, 2)))
+        ancient = find_route(tiles, 5, (0, 2), (4, 2), ancient=True)
+        self.assertTrue(ancient)
+        self.assertTrue(any(tiles[k] == DEEP for k in ancient))
+
+    def test_rivers_have_connected_tiles(self):
+        n = 32
+        # Sloping ground draining to the bottom map edge.
+        heights = [1 - y / n for y in range(n) for _ in range(n)]
+        terrain = [GRASS] * (n*n)
+        paths = carve_rivers(terrain, heights, n, seed=7, count=3)
+        for path in paths:
+            self.assertTrue(all(terrain[k] == SHALLOW for k in path))
+            for a,b in zip(path,path[1:]):
+                self.assertEqual(abs(a//n-b//n)+abs(a%n-b%n),1)
 
 
 class WorldTests(unittest.TestCase):
@@ -50,6 +72,7 @@ class WorldTests(unittest.TestCase):
             self.assertEqual(restored.routes, self.world.routes)
             self.assertEqual(restored.settlements, self.world.settlements)
             self.assertEqual(restored.objects, self.world.objects)
+            self.assertEqual(restored.rivers, self.world.rivers)
 
     def test_settlements_do_not_erase_natural_terrain(self):
         # Generate a reference map without settlements/roads/objects.
@@ -61,7 +84,7 @@ class WorldTests(unittest.TestCase):
         # Roads may replace tiles, but settlements may not overwrite terrain.
         for before, after in zip(natural.terrain, self.world.terrain):
             if before != after:
-                self.assertEqual(after, ROAD)
+                self.assertIn(after, (ROAD, ANCIENT))
 
     def test_objects_follow_terrain_rules(self):
         n = self.world.params.size

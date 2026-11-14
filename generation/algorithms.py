@@ -1,7 +1,7 @@
 """Reusable, engine-independent geography and pathfinding algorithms."""
 import heapq
 from collections import deque
-from config import DEEP, MOUNTAIN, FOREST, ROCK, SHALLOW
+from config import DEEP, MOUNTAIN, FOREST, ROCK, SHALLOW, ROAD, ANCIENT
 from opensimplex import OpenSimplex
 
 def water_components(terrain, n):
@@ -28,7 +28,7 @@ def water_components(terrain, n):
     return regions
 
 
-def find_route(terrain, n, start, goal, elevation=None, seed=0):
+def find_route(terrain, n, start, goal, elevation=None, seed=0, ancient=False):
     """A* road routing with slope costs and smoothly varying terrain preferences.
 
     The optional elevation field penalizes steep roads. Low-frequency noise
@@ -61,13 +61,17 @@ def find_route(terrain, n, start, goal, elevation=None, seed=0):
                 continue
             v = yy*n+xx
             tile = terrain[v]
-            if tile in (DEEP, MOUNTAIN):
+            if tile in (DEEP, MOUNTAIN) and not ancient:
                 continue
             if v not in preferences:
                 noise = road_noise.noise2(xx / 18.0, yy / 18.0)
                 preferences[v] = (noise + 1) * 1.4
             slope = abs(elevation[v] - elevation[u]) if elevation is not None else 0
-            step = ({FOREST: 1.4, ROCK: 5, SHALLOW: 9}.get(tile, 1)
+            # Clearing forest is comparatively easy with tools and labor.
+            # Ancient routes can span difficult terrain via surviving works.
+            tile_cost = {FOREST: 1.08, ROCK: 5, SHALLOW: 9,
+                         DEEP: 19, MOUNTAIN: 22, ROAD: .75, ANCIENT: .75}
+            step = (tile_cost.get(tile, 1)
                     + 50 * slope + preferences[v])
             new_cost = cost[u] + step
             if new_cost < cost.get(v, float("inf")):

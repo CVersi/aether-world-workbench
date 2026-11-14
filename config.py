@@ -7,11 +7,11 @@ SIZE = (1160, 760)
 MAP_RECT = pygame.Rect(20, 75, 740, 650)
 PANEL_X = 790
 SAVE_DIR = Path(__file__).resolve().parent / "saved_worlds"
-TERRAIN_NAMES = ["Grass", "Forest", "Sand", "Shallow water", "Deep water", "Rock", "Mountain", "Road"]
+TERRAIN_NAMES = ["Grass", "Forest", "Sand", "Shallow water", "Deep water", "Rock", "Mountain", "Road", "Ancient road"]
 COLORS = [(115, 164, 82), (48, 109, 66), (205, 184, 119), (82, 161, 196),
-          (40, 98, 156), (132, 130, 116), (100, 103, 114), (159, 124, 86)]
-GRASS, FOREST, SAND, SHALLOW, DEEP, ROCK, MOUNTAIN, ROAD = range(8)
-PASSABLE_ON_FOOT = {GRASS, FOREST, SAND, SHALLOW, ROCK, ROAD}
+          (40, 98, 156), (132, 130, 116), (100, 103, 114), (159, 124, 86), (153, 126, 178)]
+GRASS, FOREST, SAND, SHALLOW, DEEP, ROCK, MOUNTAIN, ROAD, ANCIENT = range(9)
+PASSABLE_ON_FOOT = {GRASS, FOREST, SAND, SHALLOW, ROCK, ROAD, ANCIENT}
 
 
 @dataclass
@@ -28,6 +28,7 @@ class Parameters:
     min_beach_lake: int = 100
     shallow_lake_max: int = 35
     settlement_count: int = 9
+    river_count: int = 5
 
 
 BLUEPRINTS = {

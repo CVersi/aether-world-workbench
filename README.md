@@ -1,6 +1,8 @@
-# The Fractured Aether — World Workbench v0.2
+# The Fractured Aether — World Workbench v0.3
 
 This is an independent Python/Pygame application for generating, inspecting and saving worlds. It does not change the original game. **v0.2 makes forests more prevalent, preserves terrain when placing settlements, improves roads and adds lightweight resource objects.**
+
+**v0.3 adds experimental river routing and an ancient infrastructure route class.** Forests now carry only a small road-construction penalty, reflecting the setting's engineering capabilities.
 
 ## Start
 
@@ -94,6 +96,18 @@ python -m unittest discover -s tests -v
 - **Roads:** A* now prefers gentler slopes and follows broad deterministic road-preference bands. Road geometry is still tile-based and will need more work.
 - **Decorative objects:** Deterministically positioned trees and boulders make the preview easier to read. They are recorded in `WorldModel.objects` and serialized in saved worlds.
 - **Backward compatibility:** Old v0.1 world saves without an `objects` field still load (with an empty object list). Existing saved landscapes stay unchanged.
+
+## What's new in v0.3?
+
+- **`generation/hydrology.py`** adds `carve_rivers()`. A multi-source Dijkstra search begins from lakes and map boundaries, then traces sources back to outlets. The streams are deliberately shallow and may cross on foot; deeper, wider river rules will come later.
+- **River sources slider** sets the requested maximum number of upland streams. Some maps may produce fewer qualifying sources.
+- **Ancient roads** use a separate route type and purple color. The example generator attempts to connect the hub to a castle using costly crossings over water or mountains. These represent surviving infrastructure, not newly constructed roads.
+- **Modern road cost:** Forests are almost as easy to traverse as grassland. Mountains and deep water remain significant barriers unless an ancient route exists.
+- **World saves** now also contain `rivers` and typed routes. Older v0.1/v0.2 saves remain loadable.
+
+### Hydrology limitations
+
+The current routing is a useful prototype, **not physically correct watershed modeling**. River courses can still appear unnaturally straight, flow accumulation/tributaries are not simulated, and depression resolution may create a slightly uphill outlet. We'll need a more complete hydrology pass, including sediment/erosion rules, before calling the geography realistic.
 
 ### Important design distinction
 
