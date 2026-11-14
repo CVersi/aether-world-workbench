@@ -1,7 +1,7 @@
 """Reusable, engine-independent geography and pathfinding algorithms."""
 import heapq
 from collections import deque
-from config import DEEP, MOUNTAIN, FOREST, ROCK, SHALLOW, ROAD, ANCIENT
+from config import DEEP, MOUNTAIN, FOREST, ROCK, SHALLOW, ROAD, ANCIENT, TRAIL, RUINS
 from opensimplex import OpenSimplex
 
 def water_components(terrain, n):
@@ -70,7 +70,8 @@ def find_route(terrain, n, start, goal, elevation=None, seed=0, ancient=False):
             # Clearing forest is comparatively easy with tools and labor.
             # Ancient routes can span difficult terrain via surviving works.
             tile_cost = {FOREST: 1.08, ROCK: 5, SHALLOW: 9,
-                         DEEP: 19, MOUNTAIN: 22, ROAD: .75, ANCIENT: .75}
+                         DEEP: 19, MOUNTAIN: 22, ROAD: .75,
+                         ANCIENT: .75, TRAIL: 1.1, RUINS: 2}
             step = (tile_cost.get(tile, 1)
                     + 50 * slope + preferences[v])
             new_cost = cost[u] + step

@@ -143,6 +143,13 @@ class Workbench:
                 pygame.draw.circle(s,palette.get(site["blueprint"],(255,255,255)),(px,py),5)
                 if self.layer == 3:
                     s.blit(self.small.render(site["id"],True,(255,255,255)),(px+7,py-7))
+            # Ruin markers: an X that shows the rough destination on the
+            # workbench. The actual game map need not reveal these markers.
+            for ruin in self.model.ruins:
+                x,y = ruin["center"]
+                px,py = round(pos.x+x*scale),round(pos.y+y*scale)
+                pygame.draw.line(s,(255,211,137),(px-4,py-4),(px+4,py+4),2)
+                pygame.draw.line(s,(255,211,137),(px-4,py+4),(px+4,py-4),2)
         s.set_clip(old_clip)
         pygame.draw.rect(s,(105,119,123),MAP_RECT,2)
         s.blit(self.font.render("Adjust settings and click Generate",True,(235,238,239)),(PANEL_X,69))

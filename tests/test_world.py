@@ -3,9 +3,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from config import GRASS, FOREST, ROCK, ROAD, ANCIENT, DEEP, SHALLOW, Parameters
+from config import (GRASS, FOREST, ROCK, ROAD, ANCIENT, DEEP,
+                    SHALLOW, RUINS, TRAIL, Parameters)
 from generation.algorithms import water_components, find_route
 from generation.hydrology import carve_rivers
+from generation.ruins import place_ruins
 from models.world_model import WorldModel
 
 
@@ -45,6 +47,22 @@ class AlgorithmTests(unittest.TestCase):
             for a,b in zip(path,path[1:]):
                 self.assertEqual(abs(a//n-b//n)+abs(a%n-b%n),1)
 
+    def test_ruins_stay_away_from_settlements(self):
+        n = 128
+        terrain = [FOREST] * (n*n)
+        height = [0.3] * (n*n)
+        settlements = [{"id":"hub","center":[64,64]}]
+        ruins,trails = place_ruins(terrain,height,n,19,settlements,4)
+        self.assertTrue(ruins)
+        for ruin in ruins:
+            x,y = ruin['center']
+            self.assertGreaterEqual((x-64)**2+(y-64)**2,28**2)
+        for trail in trails:
+            destination = next(r for r in ruins if r['id']==trail['toward'])
+            end_x,end_y = trail['end']
+            rx,ry = destination['center']
+            self.assertNotEqual((end_x,end_y),(rx,ry))
+
 
 class WorldTests(unittest.TestCase):
     @classmethod
@@ -73,18 +91,20 @@ class WorldTests(unittest.TestCase):
             self.assertEqual(restored.settlements, self.world.settlements)
             self.assertEqual(restored.objects, self.world.objects)
             self.assertEqual(restored.rivers, self.world.rivers)
+            self.assertEqual(restored.ruins, self.world.ruins)
 
     def test_settlements_do_not_erase_natural_terrain(self):
         # Generate a reference map without settlements/roads/objects.
         natural = WorldModel(Parameters(size=64, settlement_count=3), 123)
         natural._place_settlements = lambda: None
         natural._connect_settlements = lambda: None
+        natural._place_ruins = lambda: None
         natural._place_objects = lambda: None
         natural.generate()
         # Roads may replace tiles, but settlements may not overwrite terrain.
         for before, after in zip(natural.terrain, self.world.terrain):
             if before != after:
-                self.assertIn(after, (ROAD, ANCIENT))
+                self.assertIn(after, (ROAD, ANCIENT, RUINS, TRAIL))
 
     def test_objects_follow_terrain_rules(self):
         n = self.world.params.size

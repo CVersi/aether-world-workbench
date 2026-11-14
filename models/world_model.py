@@ -16,6 +16,7 @@ from config import (Parameters, BLUEPRINTS, GRASS, FOREST, SAND, SHALLOW,
                     DEEP, ROCK, MOUNTAIN, ROAD, ANCIENT, PASSABLE_ON_FOOT, SAVE_DIR)
 from generation.algorithms import water_components, find_route
 from generation.hydrology import carve_rivers
+from generation.ruins import place_ruins
 
 class WorldModel:
     """Global geography, settlements and roads; no Pygame rendering dependencies."""
@@ -30,6 +31,7 @@ class WorldModel:
         self.lakes = []
         self.rivers = []
         self.objects = []
+        self.ruins = []
 
     def generate(self):
         n = self.params.size
@@ -82,7 +84,15 @@ class WorldModel:
                                   self.seed, p.river_count)
         self._place_settlements()
         self._connect_settlements()
+        self._place_ruins()
         self._place_objects()
+
+    def _place_ruins(self):
+        """Add secluded ancient sites and partial trails after modern routes."""
+        self.ruins, trails = place_ruins(
+            self.terrain, self.elevation, self.params.size,
+            self.seed, self.settlements, self.params.ruins_count)
+        self.routes.extend(trails)
 
     def _place_settlements(self):
         """Reserve a settlement REGION without changing existing terrain.
@@ -228,7 +238,7 @@ class WorldModel:
         payload = {"format_version":1,"seed":self.seed,"parameters":asdict(self.params),
                    "terrain":self.terrain,"elevation":self.elevation,"moisture":self.moisture,
                    "settlements":self.settlements,"routes":self.routes,"lakes":self.lakes,
-                   "objects":self.objects,"rivers":self.rivers}
+                   "objects":self.objects,"rivers":self.rivers,"ruins":self.ruins}
         with gzip.open(path,"wt",encoding="utf-8") as f:
             json.dump(payload,f,separators=(",",":"))
 
@@ -245,6 +255,7 @@ class WorldModel:
         # Older v0.1 saves don't have environmental objects.
         model.objects = data.get("objects",[])
         model.rivers = data.get("rivers",[])
+        model.ruins = data.get("ruins",[])
         if len(model.terrain) != p.size*p.size:
             raise ValueError("Invalid saved terrain dimensions")
         return model

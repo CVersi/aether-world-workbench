@@ -1,8 +1,10 @@
-# The Fractured Aether — World Workbench v0.3
+# The Fractured Aether — World Workbench v0.4
 
 This is an independent Python/Pygame application for generating, inspecting and saving worlds. It does not change the original game. **v0.2 makes forests more prevalent, preserves terrain when placing settlements, improves roads and adds lightweight resource objects.**
 
 **v0.3 adds experimental river routing and an ancient infrastructure route class.** Forests now carry only a small road-construction penalty, reflecting the setting's engineering capabilities.
+
+**v0.4 improves river appearance and introduces isolated ruins with incomplete forest trails.**
 
 ## Start
 
@@ -26,7 +28,9 @@ world_workbench/
 ├── README.md
 ├── generation/
 │   ├── __init__.py
-│   └── algorithms.py        # Flood fill and A* pathfinding
+│   ├── algorithms.py        # Flood fill and A* pathfinding
+│   ├── hydrology.py         # Water routing and river centerlines
+│   └── ruins.py             # Ruin placement and forgotten trails
 ├── models/
 │   ├── __init__.py
 │   └── world_model.py       # World generation, data, save/load
@@ -108,6 +112,20 @@ python -m unittest discover -s tests -v
 ### Hydrology limitations
 
 The current routing is a useful prototype, **not physically correct watershed modeling**. River courses can still appear unnaturally straight, flow accumulation/tributaries are not simulated, and depression resolution may create a slightly uphill outlet. We'll need a more complete hydrology pass, including sediment/erosion rules, before calling the geography realistic.
+
+## What's new in v0.4?
+
+- **Rivers prefer lakes** instead of the world boundary whenever deep water exists. If no deep lake exists, map boundaries become fallback outlets.
+- **Meandering centerlines:** a post-processing function displaces river waypoints sideways with broad bends while keeping their ends connected. It rejects unsafe bends through lakes and mountains. This makes the preview more organic; it is not a substitute for erosion simulation.
+- **Ruins terrain:** the new `RUINS` tile (ID 9, tan) marks small irregular remnants. The workbench also marks ruin centers with amber Xs so designers can find them; this overlay need not exist on a player's map.
+- **Overgrown trails:** `TRAIL` (ID 10, muted brown) leads generally toward a ruin but ends 7–14 tiles early. Players must search the surrounding wilderness.
+- **Separation rules:** ruin centers must be at least 28 tiles from current settlement centers and 25 tiles from other ruins. The algorithm may generate fewer ruins than requested if suitable positions aren't available.
+- **Ruin count:** configure `ruins_count` in `config.py` (default 4). A UI slider can be added when we reorganize the control panel.
+- **Save compatibility:** new saves contain a `ruins` array and trail route records; v0.1–v0.3 saves still load.
+
+### Important limitations for our eventual game
+
+Ruin sites are currently small tile markers, not enterable structures, quest locations, dungeons, or loot containers. Their paths are generated independently and don't yet model ownership, construction history or decay. A future story-aware generator should distinguish mandatory ruins from optional points of interest and validate that each required one can eventually be reached.
 
 ### Important design distinction
 
