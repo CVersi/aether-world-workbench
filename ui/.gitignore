@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+saved_worlds/
+.venv/
+*.sublime-workspace
+

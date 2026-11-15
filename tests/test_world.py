@@ -3,13 +3,35 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from config import GRASS, FOREST, ROCK, ROAD, ANCIENT, DEEP, SHALLOW, Parameters
+from config import (GRASS, FOREST, ROCK, ROAD, ANCIENT, DEEP,
+                    SHALLOW, RUINS, TRAIL, Parameters)
 from generation.algorithms import water_components, find_route
 from generation.hydrology import carve_rivers
+from generation.ruins import place_ruins
+from generation.metrics import calculate_height_and_slope, analyze_world
 from models.world_model import WorldModel
 
 
 class AlgorithmTests(unittest.TestCase):
+    def test_slope_uses_real_world_horizontal_distance(self):
+        # Height rises 8 meters between adjacent tiles, each 8 meters apart:
+        # rise/run=1, therefore the slope is approximately 45 degrees.
+        samples = [0.0,1.0,2.0] * 3
+        meters,angles = calculate_height_and_slope(
+            samples,3,meters_per_tile=8,vertical_span_meters=8,sea_level=0)
+        self.assertAlmostEqual(meters[1],8)
+        self.assertAlmostEqual(angles[4],45,delta=0.1)
+
+    def test_connectivity_detects_isolated_walkable_land(self):
+        n=5
+        terrain=[DEEP]*(n*n)
+        terrain[0]=GRASS
+        terrain[1]=GRASS
+        terrain[-1]=GRASS
+        report=analyze_world(terrain,[0.0]*(n*n),n,8,[])
+        self.assertAlmostEqual(report['walkable_percent'],12,delta=.01)
+        self.assertAlmostEqual(report['connected_percent_of_walkable'],66.67,delta=.01)
+
     def test_connected_water_excludes_diagonal_adjacency(self):
         # Four-neighbor flood fill: diagonally touching water is separate.
         tiles = [DEEP, GRASS, GRASS,
@@ -45,6 +67,22 @@ class AlgorithmTests(unittest.TestCase):
             for a,b in zip(path,path[1:]):
                 self.assertEqual(abs(a//n-b//n)+abs(a%n-b%n),1)
 
+    def test_ruins_stay_away_from_settlements(self):
+        n = 128
+        terrain = [FOREST] * (n*n)
+        height = [0.3] * (n*n)
+        settlements = [{"id":"hub","center":[64,64]}]
+        ruins,trails = place_ruins(terrain,height,n,19,settlements,4)
+        self.assertTrue(ruins)
+        for ruin in ruins:
+            x,y = ruin['center']
+            self.assertGreaterEqual((x-64)**2+(y-64)**2,28**2)
+        for trail in trails:
+            destination = next(r for r in ruins if r['id']==trail['toward'])
+            end_x,end_y = trail['end']
+            rx,ry = destination['center']
+            self.assertNotEqual((end_x,end_y),(rx,ry))
+
 
 class WorldTests(unittest.TestCase):
     @classmethod
@@ -56,6 +94,8 @@ class WorldTests(unittest.TestCase):
     def test_world_dimensions(self):
         self.assertEqual(len(self.world.terrain), 64 * 64)
         self.assertEqual(len(self.world.elevation), 64 * 64)
+        self.assertEqual(len(self.world.height_m), 64 * 64)
+        self.assertEqual(len(self.world.slope_degrees), 64 * 64)
 
     def test_deterministic_generation(self):
         other = WorldModel(Parameters(size=64, settlement_count=3), 123)
@@ -73,18 +113,22 @@ class WorldTests(unittest.TestCase):
             self.assertEqual(restored.settlements, self.world.settlements)
             self.assertEqual(restored.objects, self.world.objects)
             self.assertEqual(restored.rivers, self.world.rivers)
+            self.assertEqual(restored.ruins, self.world.ruins)
+            self.assertEqual(restored.height_m, self.world.height_m)
+            self.assertEqual(restored.validation, self.world.validation)
 
     def test_settlements_do_not_erase_natural_terrain(self):
         # Generate a reference map without settlements/roads/objects.
         natural = WorldModel(Parameters(size=64, settlement_count=3), 123)
         natural._place_settlements = lambda: None
         natural._connect_settlements = lambda: None
+        natural._place_ruins = lambda: None
         natural._place_objects = lambda: None
         natural.generate()
         # Roads may replace tiles, but settlements may not overwrite terrain.
         for before, after in zip(natural.terrain, self.world.terrain):
             if before != after:
-                self.assertIn(after, (ROAD, ANCIENT))
+                self.assertIn(after, (ROAD, ANCIENT, RUINS, TRAIL))
 
     def test_objects_follow_terrain_rules(self):
         n = self.world.params.size

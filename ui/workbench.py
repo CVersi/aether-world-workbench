@@ -54,6 +54,8 @@ class Workbench:
     def generate(self):
         self.model = WorldModel(self.params,self.seed)
         self.notice = "Generating world..."
+        print(f"Generating {self.params.size}x{self.params.size} world; "
+              f"{self.params.meters_per_tile:g} meters/tile...")
         self.model.generate()
         self.refresh_preview()
         self.dirty = False
@@ -71,6 +73,14 @@ class Workbench:
                 elif self.layer == 2:
                     value = max(0,min(255,round((self.model.moisture[k]+1)*127)))
                     color = (45,value,180)
+                elif self.layer == 4:
+                    # Slope view: gentle = green, moderate = yellow,
+                    # steep = red. The scale is in actual degrees.
+                    slope = self.model.slope_degrees[k]
+                    fraction = max(0,min(1,slope/45))
+                    color = (round(60+195*fraction),
+                             round(175-120*fraction),
+                             round(65-45*fraction))
                 else:
                     color = COLORS[tile]
                 surface.set_at((k%n,k//n),color)
@@ -110,7 +120,9 @@ class Workbench:
         s = self.screen
         s.fill((24,30,37))
         s.blit(self.title.render("World Workbench",True,(238,240,236)),(20,20))
-        s.blit(self.font.render(f"Seed {self.seed}   •   {self.model.params.size}² tiles   •   Layer {self.layer+1}/4",True,(154,198,172)),(276,27))
+        header = (f"Seed {self.seed}  •  {self.model.params.size}²  "
+                  f"•  {self.model.params.meters_per_tile:g}m/tile  •  Layer {self.layer+1}/5")
+        s.blit(self.font.render(header,True,(154,198,172)),(258,27))
         pygame.draw.rect(s,(10,19,22),MAP_RECT)
         # Fit the whole map at 1.0; zoom is relative to this fitted size.
         base = min(MAP_RECT.width,MAP_RECT.height)/self.model.params.size
@@ -143,6 +155,13 @@ class Workbench:
                 pygame.draw.circle(s,palette.get(site["blueprint"],(255,255,255)),(px,py),5)
                 if self.layer == 3:
                     s.blit(self.small.render(site["id"],True,(255,255,255)),(px+7,py-7))
+            # Ruin markers: an X that shows the rough destination on the
+            # workbench. The actual game map need not reveal these markers.
+            for ruin in self.model.ruins:
+                x,y = ruin["center"]
+                px,py = round(pos.x+x*scale),round(pos.y+y*scale)
+                pygame.draw.line(s,(255,211,137),(px-4,py-4),(px+4,py+4),2)
+                pygame.draw.line(s,(255,211,137),(px-4,py+4),(px+4,py-4),2)
         s.set_clip(old_clip)
         pygame.draw.rect(s,(105,119,123),MAP_RECT,2)
         s.blit(self.font.render("Adjust settings and click Generate",True,(235,238,239)),(PANEL_X,69))
@@ -154,9 +173,15 @@ class Workbench:
             s.blit(txt,txt.get_rect(center=rect.center))
         counts,walkable = self.model.statistics()
         n = len(self.model.terrain)
-        summary = (f"On-foot {walkable:.1f}% | Forest {counts[FOREST]*100/n:.1f}% | "
-                   f"Deep water {counts[DEEP]*100/n:.1f}% | Objects {len(self.model.objects)}")
-        s.blit(self.small.render(summary,True,(214,227,220)),(20,736))
+        v = self.model.validation
+        summary = (f"Forest {counts[FOREST]*100/n:.1f}%  | Walkable {v['walkable_percent']:.1f}%  "
+                   f"| Connected {v['connected_percent_of_walkable']:.1f}%  "
+                   f"| Buildable {v['buildable_percent']:.1f}%")
+        s.blit(self.small.render(summary,True,(214,227,220)),(20,733))
+        summary2 = (f"World {v['physical_width_km']:.2f}km wide  "
+                    f"| Steep {v['steep_percent']:.1f}%  "
+                    f"| [ ] tile meters  , . height  Z size  1–5 layers")
+        s.blit(self.small.render(summary2,True,(172,191,188)),(20,748))
         status = self.notice + ("  [Unsaved settings]" if self.dirty else "")
         s.blit(self.small.render(status[:62],True,(214,185,124)),(790,729))
         pygame.display.flip()
@@ -179,9 +204,31 @@ class Workbench:
                     elif event.key == pygame.K_f:
                         self.zoom = 1.0
                         self.offset.update(0,0)
-                    elif pygame.K_1 <= event.key <= pygame.K_4:
+                    elif pygame.K_1 <= event.key <= pygame.K_5:
                         self.layer = event.key-pygame.K_1
                         self.refresh_preview()
+                    elif event.key == pygame.K_z:
+                        # Adjust the planned world resolution without
+                        # generating millions of tiles while a key is held.
+                        sizes = (256,512,1024)
+                        idx = sizes.index(self.params.size) if self.params.size in sizes else 0
+                        self.params.size = sizes[(idx+1)%len(sizes)]
+                        self.dirty = True
+                        self.notice = f"Next world size: {self.params.size}; click Generate"
+                    elif event.key in (pygame.K_LEFTBRACKET,pygame.K_RIGHTBRACKET):
+                        delta = -2 if event.key == pygame.K_LEFTBRACKET else 2
+                        self.params.meters_per_tile = max(2,min(64,self.params.meters_per_tile+delta))
+                        self.dirty = True
+                        self.notice = "Tile scale changed; click Generate"
+                    elif event.key in (pygame.K_COMMA, pygame.K_PERIOD):
+                        # This changes the vertical distance represented by
+                        # one noise unit, not the horizontal tile spacing.
+                        delta = -20 if event.key == pygame.K_COMMA else 20
+                        self.params.vertical_span_meters = max(
+                            20,min(600,self.params.vertical_span_meters+delta))
+                        self.dirty = True
+                        self.notice = (f"Elevation scale {self.params.vertical_span_meters:g}m; "
+                                       "click Generate")
                 elif event.type == pygame.MOUSEWHEEL and MAP_RECT.collidepoint(pygame.mouse.get_pos()):
                     self.zoom = max(.5,min(8,self.zoom * (1.2**event.y)))
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:

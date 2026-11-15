@@ -7,11 +7,12 @@ SIZE = (1160, 760)
 MAP_RECT = pygame.Rect(20, 75, 740, 650)
 PANEL_X = 790
 SAVE_DIR = Path(__file__).resolve().parent / "saved_worlds"
-TERRAIN_NAMES = ["Grass", "Forest", "Sand", "Shallow water", "Deep water", "Rock", "Mountain", "Road", "Ancient road"]
+TERRAIN_NAMES = ["Grass", "Forest", "Sand", "Shallow water", "Deep water", "Rock", "Mountain", "Road", "Ancient road", "Ruins", "Overgrown trail"]
 COLORS = [(115, 164, 82), (48, 109, 66), (205, 184, 119), (82, 161, 196),
-          (40, 98, 156), (132, 130, 116), (100, 103, 114), (159, 124, 86), (153, 126, 178)]
-GRASS, FOREST, SAND, SHALLOW, DEEP, ROCK, MOUNTAIN, ROAD, ANCIENT = range(9)
-PASSABLE_ON_FOOT = {GRASS, FOREST, SAND, SHALLOW, ROCK, ROAD, ANCIENT}
+          (40, 98, 156), (132, 130, 116), (100, 103, 114), (159, 124, 86),
+          (153, 126, 178), (190, 163, 122), (112, 105, 79)]
+GRASS, FOREST, SAND, SHALLOW, DEEP, ROCK, MOUNTAIN, ROAD, ANCIENT, RUINS, TRAIL = range(11)
+PASSABLE_ON_FOOT = {GRASS, FOREST, SAND, SHALLOW, ROCK, ROAD, ANCIENT, RUINS, TRAIL}
 
 
 @dataclass
@@ -29,6 +30,15 @@ class Parameters:
     shallow_lake_max: int = 35
     settlement_count: int = 9
     river_count: int = 5
+    ruins_count: int = 4
+    # These are PHYSICAL units, independent of Pygame sprite resolution.
+    # A macro tile is an 8 m × 8 m cell in the eventual 3D landscape.
+    meters_per_tile: float = 8.0
+    # One unit of normalized OpenSimplex elevation corresponds to 120 meters.
+    # A very large vertical scale made almost all terrain too steep to build.
+    vertical_span_meters: float = 120.0
+    max_walking_slope: float = 35.0
+    max_building_slope: float = 12.0
 
 
 BLUEPRINTS = {
